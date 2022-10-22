@@ -32,6 +32,7 @@ const (
 	AddrAbsoluteY
 	AddrIndirectX
 	AddrIndirectY
+	AddrImplied
 )
 
 type CPU struct {
@@ -44,17 +45,28 @@ type CPU struct {
 	memory          [MEMORY_SIZE]uint8
 }
 
+type Instruction struct {
+	name string
+	mode AddressMode
+	size uint
+}
+
 func NewCPU() *CPU {
 	c := &CPU{}
 	return c
 }
 
-func (c *CPU) Run() {
+func (c *CPU) Run() error {
 	var keepLooping bool = true
+	var err error
 	for keepLooping {
 		instruction := c.getNextInstructionByte()
-		keepLooping = c.processInstruction(instruction)
+		keepLooping, err = c.processInstruction(instruction)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (c *CPU) LoadROM(memory []uint8) error {
@@ -117,61 +129,80 @@ func (c *CPU) getNextInstructionByte() uint8 {
 	return result
 }
 
-func (c *CPU) processInstruction(instruction uint8) bool {
-	switch instruction {
-	case 0xa9: // LDA
-		value := c.getNextInstructionByte()
-		c.accumulator = value
-		c.updateStatusFlags(value)
+func (c *CPU) processInstruction(instruction uint8) (bool, error) {
+	opcodes := make(map[uint8]Instruction)
+	opcodes[0x00] = Instruction{"BRK", AddrImplied, 1}
+	opcodes[0x69] = Instruction{"ADC", AddrImmediate, 2}
+	opcodes[0x65] = Instruction{"ADC", AddrZeroPage, 2}
+	opcodes[0xa9] = Instruction{"LDA", AddrImmediate, 2}
+	opcodes[0xa5] = Instruction{"LDA", AddrZeroPage, 2}
+	opcodes[0xb5] = Instruction{"LDA", AddrZeroPageX, 2}
+	opcodes[0xad] = Instruction{"LDA", AddrAbsolute, 3}
+	opcodes[0xbd] = Instruction{"LDA", AddrAbsoluteX, 3}
+	opcodes[0xb9] = Instruction{"LDA", AddrAbsoluteY, 3}
+	opcodes[0xa1] = Instruction{"LDA", AddrIndirectX, 3}
+	opcodes[0xb1] = Instruction{"LDA", AddrIndirectY, 3}
+	opcodes[0xaa] = Instruction{"TAX", AddrImplied, 1}
+	opcodes[0xe8] = Instruction{"INX", AddrImplied, 1}
+	opcodes[0xc8] = Instruction{"INY", AddrImplied, 1}
 
-	case 0xaa: // TAX
-		value := c.accumulator
-		c.index_x = value
-		c.updateStatusFlags(c.index_x)
-
-	case 0xe8: // INX
-		if c.index_x == 0xff {
-			c.index_x = 0x01
-		} else {
-			c.index_x = c.index_x + 1
-		}
-		c.updateStatusFlags(c.index_x)
-
-	case 0x00: // BRK
-		return false
-	}
-
-	return true
+	operation := opcodes[instruction]
+	//fmt.Println(instruction, operation)
+	keepLooping, err := c.runOpcode(operation)
+	c.program_counter += uint16(operation.size - 1)
+	return keepLooping, err
 }
 
 func (c *CPU) updateStatusFlags(value uint8) {
 	if value&NEG_BIT > 0 {
-		c.status = c.status | N_BIT_STATUS
+		c.setFlag(N_BIT_STATUS)
 	} else {
-		c.status = c.status & (0xff ^ N_BIT_STATUS)
+		c.clearFlag(N_BIT_STATUS)
 	}
 	if value == 0 {
-		c.status = c.status | Z_BIT_STATUS
+		c.setFlag(Z_BIT_STATUS)
 	} else {
-		c.status = c.status & (0xff ^ Z_BIT_STATUS)
+		c.clearFlag(Z_BIT_STATUS)
 	}
+}
+
+func (c *CPU) setFlag(flag uint8) {
+	c.status = c.status | flag
+}
+
+func (c *CPU) clearFlag(flag uint8) {
+	c.status = c.status & (0xff ^ flag)
 }
 
 // Gets the address to read for the parameter to an opcode.
 func (c *CPU) getParameterAddress(mode AddressMode) uint16 {
+	param_address := c.program_counter
 	switch mode {
 	case AddrImmediate:
-		return c.program_counter
+		// In immediate mode, the next byte is the param address
+		return param_address
 	case AddrZeroPage:
-		return uint16(c.memory[c.program_counter])
+		return uint16(c.memory[param_address])
 	case AddrZeroPageX:
-		return modularAdd(c.memory[c.program_counter], c.index_x)
+		return modularAdd(c.memory[param_address], c.index_x)
 	case AddrAbsolute:
-		return c.readAddressValue(c.program_counter)
+		return c.readAddressValue(param_address)
 	case AddrAbsoluteX:
+		return c.readAddressValue(param_address) + uint16(c.index_x)
 	case AddrAbsoluteY:
+		return c.readAddressValue(param_address) + uint16(c.index_y)
 	case AddrIndirectX:
+		// Get the parameter
+		// Add X register to it, treating it as a zero-page address.
+		// Read that address.  That's where our param lives.
+		zero_page_addr := modularAdd(c.memory[param_address], c.index_x)
+		return c.readAddressValue(zero_page_addr)
 	case AddrIndirectY:
+		// Get the parameter.  Treat it as a zero-page address.
+		// Get the two-bytes at that zero-page. That's our base address.
+		// Add the Y register to that address.  That's the param address.
+		addr := c.readAddressValue(uint16(param_address))
+		return uint16(c.index_y) + addr
 	}
 	return 0
 }

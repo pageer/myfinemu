@@ -19,4 +19,7 @@ to help teach myself Go and learn about console emulation.
 4. Audio support
 
 # NES Information
+* [Writing a NES Emulator in Rust](https://bugzmanov.github.io/nes_ebook/)
 * [NES Memory Map](https://www.nesdev.org/wiki/CPU_memory_map)
+* [6502 Guide](https://www.nesdev.org/obelisk-6502-guide/)
+* [Easy 6502](https://skilldrick.github.io/easy6502/)

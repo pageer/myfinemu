@@ -23,16 +23,14 @@ func TestRun_Scenario(t *testing.T) {
 		memory               []uint8
 		expected_accumulator uint8
 		expected_index_x     uint8
-		expected_n_bit       uint8
-		expected_z_bit       uint8
+		expected_status      uint8
 	}{
 		{
 			name:                 "LDA TAX INX BRK",
 			memory:               []uint8{0xa9, 0xc0, 0xaa, 0xe8, 0x00},
 			expected_accumulator: 0xc0,
 			expected_index_x:     0xc1,
-			expected_n_bit:       N_BIT_STATUS,
-			expected_z_bit:       ZERO_BIT,
+			expected_status:      N_BIT_STATUS,
 		},
 	}
 
@@ -44,8 +42,7 @@ func TestRun_Scenario(t *testing.T) {
 
 			assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
 			assert.Equal(t, test.expected_index_x, c.index_x, "Index X incorrect")
-			assert.Equal(t, test.expected_n_bit, c.status&N_BIT_STATUS, "Negative status bit incorrect")
-			assert.Equal(t, test.expected_z_bit, c.status&Z_BIT_STATUS, "Zero status bit incorrect")
+			assert.Equal(t, test.expected_status, c.status, "Status is incorrect")
 		}
 		t.Run(test.name, callback)
 	}
@@ -313,48 +310,42 @@ func TestRun_INX_Implied(t *testing.T) {
 		index_x          uint8
 		initial_status   uint8
 		expected_index_x uint8
-		expected_n_bit   uint8
-		expected_z_bit   uint8
+		expected_status  uint8
 	}{
 		{
 			name:             "Positive value",
 			index_x:          0x77,
 			initial_status:   N_BIT_STATUS | Z_BIT_STATUS,
 			expected_index_x: 0x78,
-			expected_n_bit:   ZERO_BIT,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  ZERO_BIT,
 		},
 		{
 			name:             "Positive to negative",
 			index_x:          0x7f,
 			initial_status:   ZERO_BIT,
 			expected_index_x: 0x80,
-			expected_n_bit:   N_BIT_STATUS,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  N_BIT_STATUS,
 		},
 		{
 			name:             "Negative value",
 			index_x:          0xa2,
 			initial_status:   N_BIT_STATUS,
 			expected_index_x: 0xa3,
-			expected_n_bit:   N_BIT_STATUS,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  N_BIT_STATUS,
 		},
 		{
 			name:             "Zero value",
 			index_x:          0x00,
 			initial_status:   Z_BIT_STATUS,
 			expected_index_x: 0x01,
-			expected_n_bit:   ZERO_BIT,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  ZERO_BIT,
 		},
 		{
 			name:             "Overflow",
 			index_x:          0xff,
 			initial_status:   N_BIT_STATUS,
 			expected_index_x: 0x00,
-			expected_n_bit:   ZERO_BIT,
-			expected_z_bit:   Z_BIT_STATUS,
+			expected_status:  Z_BIT_STATUS,
 		},
 	}
 
@@ -367,8 +358,7 @@ func TestRun_INX_Implied(t *testing.T) {
 			c.Run()
 
 			assert.Equal(t, test.expected_index_x, c.index_x, "Index X register incorrect")
-			assert.Equal(t, test.expected_n_bit, c.status&N_BIT_STATUS, "Negative status bit incorrect")
-			assert.Equal(t, test.expected_z_bit, c.status&Z_BIT_STATUS, "Zero status bit incorrect")
+			assert.Equal(t, test.expected_status, c.status, "Status is incorrect")
 		}
 		t.Run(test.name, callback)
 	}
@@ -380,48 +370,42 @@ func TestRun_INY_Implied(t *testing.T) {
 		index_y          uint8
 		initial_status   uint8
 		expected_index_y uint8
-		expected_n_bit   uint8
-		expected_z_bit   uint8
+		expected_status  uint8
 	}{
 		{
 			name:             "Positive value",
 			index_y:          0x77,
 			initial_status:   N_BIT_STATUS | Z_BIT_STATUS,
 			expected_index_y: 0x78,
-			expected_n_bit:   ZERO_BIT,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  ZERO_BIT,
 		},
 		{
 			name:             "Positive to negative",
 			index_y:          0x7f,
 			initial_status:   ZERO_BIT,
 			expected_index_y: 0x80,
-			expected_n_bit:   N_BIT_STATUS,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  N_BIT_STATUS,
 		},
 		{
 			name:             "Negative value",
 			index_y:          0xa2,
 			initial_status:   N_BIT_STATUS,
 			expected_index_y: 0xa3,
-			expected_n_bit:   N_BIT_STATUS,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  N_BIT_STATUS,
 		},
 		{
 			name:             "Zero value",
 			index_y:          0x00,
 			initial_status:   Z_BIT_STATUS,
 			expected_index_y: 0x01,
-			expected_n_bit:   ZERO_BIT,
-			expected_z_bit:   ZERO_BIT,
+			expected_status:  ZERO_BIT,
 		},
 		{
 			name:             "Overflow",
 			index_y:          0xff,
 			initial_status:   N_BIT_STATUS,
 			expected_index_y: 0x00,
-			expected_n_bit:   ZERO_BIT,
-			expected_z_bit:   Z_BIT_STATUS,
+			expected_status:  Z_BIT_STATUS,
 		},
 	}
 
@@ -434,8 +418,7 @@ func TestRun_INY_Implied(t *testing.T) {
 			c.Run()
 
 			assert.Equal(t, test.expected_index_y, c.index_y, "Index Y register incorrect")
-			assert.Equal(t, test.expected_n_bit, c.status&N_BIT_STATUS, "Negative status bit incorrect")
-			assert.Equal(t, test.expected_z_bit, c.status&Z_BIT_STATUS, "Zero status bit incorrect")
+			assert.Equal(t, test.expected_status, c.status, "Status is incorrect")
 		}
 		t.Run(test.name, callback)
 	}

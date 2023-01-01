@@ -24,11 +24,20 @@ const (
 type AddressMode int
 
 const (
+	// The parameter IS the value - #$01 = 1
 	AddrImmediate AddressMode = iota
+	// Single byte address - $c0 = value at address 0xc0
 	AddrZeroPage
+	// Single byte address, but reg X is added to it.
+	// if x = 1, "$c0,x" = value at address 0xc1
 	AddrZeroPageX
+	// Two-byte absolute address - $c000 = value at address 0xc000
 	AddrAbsolute
+	// Two-byte absolute address with reg X added to it.
+	// e.g. if x = 1, $c000,x = value at address 0xc001
 	AddrAbsoluteX
+	// Two-byte absolute address with reg Y added to it.
+	// e.g. if y = 1, $c000,y = value at address 0xc001
 	AddrAbsoluteY
 	AddrIndirectX
 	AddrIndirectY
@@ -48,7 +57,40 @@ type CPU struct {
 type Instruction struct {
 	name string
 	mode AddressMode
+	hex  uint8
 	size uint
+}
+
+var opcodes map[uint8]Instruction
+
+func init() {
+	opcodeList := []Instruction{
+		Instruction{"BRK", AddrImplied, 0x00, 1},
+		Instruction{"ADC", AddrImmediate, 0x69, 2},
+		Instruction{"ADC", AddrZeroPage, 0x65, 2},
+		Instruction{"ADC", AddrZeroPageX, 0x75, 2},
+		Instruction{"ADC", AddrAbsolute, 0x6d, 3},
+		Instruction{"ADC", AddrAbsoluteX, 0x7d, 3},
+		Instruction{"ADC", AddrAbsoluteY, 0x79, 3},
+		Instruction{"ADC", AddrIndirectX, 0x61, 3},
+		Instruction{"ADC", AddrIndirectY, 0x71, 3},
+		Instruction{"LDA", AddrImmediate, 0xa9, 2},
+		Instruction{"LDA", AddrZeroPage, 0xa5, 2},
+		Instruction{"LDA", AddrZeroPageX, 0xb5, 2},
+		Instruction{"LDA", AddrAbsolute, 0xad, 3},
+		Instruction{"LDA", AddrAbsoluteX, 0xbd, 3},
+		Instruction{"LDA", AddrAbsoluteY, 0xb9, 3},
+		Instruction{"LDA", AddrIndirectX, 0xa1, 3},
+		Instruction{"LDA", AddrIndirectY, 0xb1, 3},
+		Instruction{"TAX", AddrImplied, 0xaa, 1},
+		Instruction{"INX", AddrImplied, 0xe8, 1},
+		Instruction{"INY", AddrImplied, 0xc8, 1},
+	}
+
+	opcodes = make(map[uint8]Instruction)
+	for _, value := range opcodeList {
+		opcodes[value.hex] = value
+	}
 }
 
 func NewCPU() *CPU {
@@ -130,22 +172,6 @@ func (c *CPU) getNextInstructionByte() uint8 {
 }
 
 func (c *CPU) processInstruction(instruction uint8) (bool, error) {
-	opcodes := make(map[uint8]Instruction)
-	opcodes[0x00] = Instruction{"BRK", AddrImplied, 1}
-	opcodes[0x69] = Instruction{"ADC", AddrImmediate, 2}
-	opcodes[0x65] = Instruction{"ADC", AddrZeroPage, 2}
-	opcodes[0xa9] = Instruction{"LDA", AddrImmediate, 2}
-	opcodes[0xa5] = Instruction{"LDA", AddrZeroPage, 2}
-	opcodes[0xb5] = Instruction{"LDA", AddrZeroPageX, 2}
-	opcodes[0xad] = Instruction{"LDA", AddrAbsolute, 3}
-	opcodes[0xbd] = Instruction{"LDA", AddrAbsoluteX, 3}
-	opcodes[0xb9] = Instruction{"LDA", AddrAbsoluteY, 3}
-	opcodes[0xa1] = Instruction{"LDA", AddrIndirectX, 3}
-	opcodes[0xb1] = Instruction{"LDA", AddrIndirectY, 3}
-	opcodes[0xaa] = Instruction{"TAX", AddrImplied, 1}
-	opcodes[0xe8] = Instruction{"INX", AddrImplied, 1}
-	opcodes[0xc8] = Instruction{"INY", AddrImplied, 1}
-
 	operation := opcodes[instruction]
 	//fmt.Println(instruction, operation)
 	keepLooping, err := c.runOpcode(operation)
@@ -184,6 +210,7 @@ func (c *CPU) getParameterAddress(mode AddressMode) uint16 {
 	case AddrZeroPage:
 		return uint16(c.memory[param_address])
 	case AddrZeroPageX:
+		//return modularAdd(c.memory[param_address], c.index_x)
 		return modularAdd(c.memory[param_address], c.index_x)
 	case AddrAbsolute:
 		return c.readAddressValue(param_address)
@@ -201,7 +228,7 @@ func (c *CPU) getParameterAddress(mode AddressMode) uint16 {
 		// Get the parameter.  Treat it as a zero-page address.
 		// Get the two-bytes at that zero-page. That's our base address.
 		// Add the Y register to that address.  That's the param address.
-		addr := c.readAddressValue(uint16(param_address))
+		addr := c.readAddressValue(uint16(c.memory[param_address]))
 		return uint16(c.index_y) + addr
 	}
 	return 0

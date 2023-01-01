@@ -18,6 +18,7 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (bool, err
 		// set the carry bit.
 		// Example: If A=#80 and the carry bit is 1, then "ADC $#80" gives A=#02
 		// and carry bit 1.
+		// NOTE: Apparently the NES CPU doesn't have a decimal mode, so BCD is ignored.
 		return func(c *CPU, mode AddressMode) (bool, error) {
 			value_address := c.getParameterAddress(mode)
 			value := c.memory[value_address]

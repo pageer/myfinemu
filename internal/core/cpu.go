@@ -25,6 +25,8 @@ type AddressMode int
 
 const (
 	// The parameter IS the value - #$01 = 1
+	// This is also used for "relative" addressing mode for branch instructions,
+	// as it amounts to the same thing.
 	AddrImmediate AddressMode = iota
 	// Single byte address - $c0 = value at address 0xc0
 	AddrZeroPage
@@ -41,6 +43,7 @@ const (
 	AddrAbsoluteY
 	AddrIndirectX
 	AddrIndirectY
+	// No explicit address needed - the parameter is implied by the instruction
 	AddrImplied
 )
 
@@ -74,6 +77,21 @@ func init() {
 		Instruction{"ADC", AddrAbsoluteY, 0x79, 3},
 		Instruction{"ADC", AddrIndirectX, 0x61, 3},
 		Instruction{"ADC", AddrIndirectY, 0x71, 3},
+		Instruction{"AND", AddrImmediate, 0x29, 2},
+		Instruction{"AND", AddrZeroPage, 0x25, 2},
+		Instruction{"AND", AddrZeroPageX, 0x35, 2},
+		Instruction{"AND", AddrAbsolute, 0x2d, 3},
+		Instruction{"AND", AddrAbsoluteX, 0x3d, 3},
+		Instruction{"AND", AddrAbsoluteY, 0x39, 3},
+		Instruction{"AND", AddrIndirectX, 0x21, 3},
+		Instruction{"AND", AddrIndirectY, 0x31, 3},
+		Instruction{"ASL", AddrImplied, 0x0a, 1},
+		Instruction{"ASL", AddrZeroPage, 0x06, 2},
+		Instruction{"ASL", AddrZeroPageX, 0x16, 2},
+		Instruction{"ASL", AddrAbsolute, 0x0e, 3},
+		Instruction{"ASL", AddrAbsoluteX, 0x1e, 3},
+		Instruction{"BCC", AddrImmediate, 0x90, 2},
+		Instruction{"BCS", AddrImmediate, 0xb0, 2},
 		Instruction{"LDA", AddrImmediate, 0xa9, 2},
 		Instruction{"LDA", AddrZeroPage, 0xa5, 2},
 		Instruction{"LDA", AddrZeroPageX, 0xb5, 2},
@@ -173,10 +191,11 @@ func (c *CPU) getNextInstructionByte() uint8 {
 
 func (c *CPU) processInstruction(instruction uint8) (bool, error) {
 	operation := opcodes[instruction]
-	//fmt.Println(instruction, operation)
-	keepLooping, err := c.runOpcode(operation)
-	c.program_counter += uint16(operation.size - 1)
-	return keepLooping, err
+	postProcessing, err := c.runOpcode(operation)
+	if postProcessing != InstructionProgramCounterUpdated {
+		c.program_counter += uint16(operation.size - 1)
+	}
+	return postProcessing != InstructionHalt, err
 }
 
 func (c *CPU) updateStatusFlags(value uint8) {

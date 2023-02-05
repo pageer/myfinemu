@@ -452,54 +452,75 @@ func TestRun_ASL(t *testing.T) {
 	runMemoryTests(absoluteXTests, uint16(0x1003))
 }
 
-func TestRun_BCC_CarrySet(t *testing.T) {
-	rom := []uint8{0x90, 0x07}
-	c := NewCPU()
-	c.LoadAndReset(rom)
-	c.status = C_BIT_STATUS
+func TestRun_RelativeBranching(t *testing.T) {
+	testCases := []struct {
+		name        string
+		opcode      uint8
+		status      uint8
+		expected_pc uint16
+	}{
+		{name: "BCC, carry set", opcode: 0x90, status: C_BIT_STATUS, expected_pc: 0x8003},
+		{name: "BCC, carry clear", opcode: 0x90, status: ZERO_BIT, expected_pc: 0x8009},
+		{name: "BCS, carry set", opcode: 0xb0, status: C_BIT_STATUS, expected_pc: 0x8009},
+		{name: "BCS, carry clear", opcode: 0xb0, status: ZERO_BIT, expected_pc: 0x8003},
+		{name: "BEQ, zero set", opcode: 0xf0, status: Z_BIT_STATUS, expected_pc: 0x8009},
+		{name: "BEQ, zero clear", opcode: 0xf0, status: ZERO_BIT, expected_pc: 0x8003},
+		{name: "BMI, negative set", opcode: 0x30, status: N_BIT_STATUS, expected_pc: 0x8009},
+		{name: "BMI, negative clear", opcode: 0x30, status: ZERO_BIT, expected_pc: 0x8003},
+		{name: "BNE, zero set", opcode: 0xd0, status: Z_BIT_STATUS, expected_pc: 0x8003},
+		{name: "BNE, zero clear", opcode: 0xd0, status: ZERO_BIT, expected_pc: 0x8009},
+		{name: "BPL, negative set", opcode: 0x10, status: N_BIT_STATUS, expected_pc: 0x8003},
+		{name: "BPL, negative clear", opcode: 0x10, status: ZERO_BIT, expected_pc: 0x8009},
+		{name: "BVC, overflow set", opcode: 0x50, status: V_BIT_STATUS, expected_pc: 0x8003},
+		{name: "BVC, overflow clear", opcode: 0x50, status: ZERO_BIT, expected_pc: 0x8009},
+		{name: "BVS, overflow set", opcode: 0x70, status: V_BIT_STATUS, expected_pc: 0x8009},
+		{name: "BVS, overflow clear", opcode: 0x70, status: ZERO_BIT, expected_pc: 0x8003},
+	}
 
-	result := c.Run()
+	for _, test := range testCases {
 
-	assert.Nil(t, result, "Error was not nil")
-	// Start at 0x8000, 2 bytes for BCC, 1 byte for BRK
-	assert.Equal(t, uint16(0x8003), c.program_counter, "Program counter incorrect")
+		callback := func(t *testing.T) {
+			rom := []uint8{test.opcode, 0x07}
+			c := NewCPU()
+			c.LoadAndReset(rom)
+			c.status = test.status
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			// Start at 0x8000, 2 bytes for BCC, 1 byte for BRK
+			assert.Equal(t, uint16(test.expected_pc), c.program_counter, "Program counter incorrect")
+		}
+		t.Run(test.name, callback)
+	}
 }
 
-func TestRun_BCC_CarryClear(t *testing.T) {
-	rom := []uint8{0x90, 0x07}
-	c := NewCPU()
-	c.LoadAndReset(rom)
-	c.status = ZERO_BIT
+func TestRun_BIT(t *testing.T) {
+	testCases := []testInput{
+		mkZeroPage("Zero-page, AND zero", 0x24, 0x02, 0x04, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPage("Zero-page, AND non-zero, positive, no overflow", 0x24, 0x04, 0x04, ZERO_BIT, ZERO_BIT),
+		mkZeroPage("Zero-page, AND non-zero, negative, no overflow", 0x24, 0x80, 0x81, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPage("Zero-page, AND non-zero, negative, overflow", 0x24, 0xc5, 0xc0, ZERO_BIT, N_BIT_STATUS|V_BIT_STATUS),
+		mkAbsolute("Absolute, AND zero", 0x2c, 0x02, 0x04, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsolute("Absolute, AND non-zero, positive, no overflow", 0x2c, 0x04, 0x04, ZERO_BIT, ZERO_BIT),
+		mkAbsolute("Absolute, AND non-zero, negative, no overflow", 0x2c, 0x85, 0x80, ZERO_BIT, N_BIT_STATUS),
+		mkAbsolute("Absolute, AND non-zero, positive, overflow", 0x2c, 0x45, 0x40, ZERO_BIT, V_BIT_STATUS),
+	}
 
-	result := c.Run()
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
 
-	assert.Nil(t, result, "Error was not nil")
-	assert.Equal(t, uint16(0x8009), c.program_counter, "Program counter incorrect")
-}
+			initializeCpuState(c, test)
 
-func TestRun_BCS_CarrySet(t *testing.T) {
-	rom := []uint8{0xb0, 0x07}
-	c := NewCPU()
-	c.LoadAndReset(rom)
-	c.status = C_BIT_STATUS
+			result := c.Run()
 
-	result := c.Run()
-
-	assert.Nil(t, result, "Error was not nil")
-	assert.Equal(t, uint16(0x8009), c.program_counter, "Program counter incorrect")
-}
-
-func TestRun_BCS_CarryClear(t *testing.T) {
-	rom := []uint8{0xb0, 0x07}
-	c := NewCPU()
-	c.LoadAndReset(rom)
-	c.status = ZERO_BIT
-
-	result := c.Run()
-
-	assert.Nil(t, result, "Error was not nil")
-	// Start at 0x8000, 2 bytes for BCC, 1 byte for BRK
-	assert.Equal(t, uint16(0x8003), c.program_counter, "Program counter incorrect")
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
 }
 
 func setCommonFields(test testInput, name string, initial, expected, status uint8) testInput {

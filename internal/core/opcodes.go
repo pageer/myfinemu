@@ -75,29 +75,62 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 		}
 
 	case "BCC":
-		// "Branch if carry clear" operation
+		// "Branch if carry clear" operation, branches if carry bit unset
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
-			value := c.memory[value_address]
-			if c.status&C_BIT_STATUS == 0 {
-				c.program_counter += uint16(value)
-				return InstructionProgramCounterUpdated, nil
-			} else {
-				return InstructionContinue, nil
-			}
+			return branchOnStatus(c, mode, C_BIT_STATUS, false)
 		}
 
 	case "BCS":
-		// "Branch if carry set" operation
+		// "Branch if carry set" operation, branches if carry bit set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, C_BIT_STATUS, true)
+		}
+
+	case "BEQ":
+		// "Branch if equal" operation, branches if zero bit set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, Z_BIT_STATUS, true)
+		}
+
+	case "BIT":
+		// "Bit test" operation, does AND with accumulator and sets Z, V, N bits
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
 			value_address := c.getParameterAddress(mode)
 			value := c.memory[value_address]
-			if c.status&C_BIT_STATUS > 0 {
-				c.program_counter += uint16(value)
-				return InstructionProgramCounterUpdated, nil
-			} else {
-				return InstructionContinue, nil
-			}
+			result := c.accumulator & value
+			c.updateStatusFlags(result)
+			c.status = c.status | (result & V_BIT_STATUS)
+			return InstructionContinue, nil
+		}
+
+	case "BMI":
+		// "Branch if minus" operation, branches if nevatige bit set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, N_BIT_STATUS, true)
+		}
+
+	case "BNE":
+		// "Branch not equal" operation, branches if zero bit not set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, Z_BIT_STATUS, false)
+		}
+
+	case "BPL":
+		// "Branch if positive" operation, branches if negative bit not set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, N_BIT_STATUS, false)
+		}
+
+	case "BVC":
+		// "Branch if overflow clear" operation, branches if overflow bit not set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, V_BIT_STATUS, false)
+		}
+
+	case "BVS":
+		// "Branch if overflow set" operation, branches if overflow bit set
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return branchOnStatus(c, mode, V_BIT_STATUS, true)
 		}
 
 	case "LDA":
@@ -183,5 +216,23 @@ func setCarryFlag(c *CPU, carry bool) {
 		c.setFlag(C_BIT_STATUS)
 	} else {
 		c.clearFlag(C_BIT_STATUS)
+	}
+}
+
+func branchOnStatus(c *CPU, mode AddressMode, flag uint8, set bool) (InstructionPostProccessingMode, error) {
+	var do_branch bool
+	value_address := c.getParameterAddress(mode)
+	value := c.memory[value_address]
+	if set {
+		do_branch = c.status&flag > 0
+	} else {
+
+		do_branch = c.status&flag == 0
+	}
+	if do_branch {
+		c.program_counter += uint16(value)
+		return InstructionProgramCounterUpdated, nil
+	} else {
+		return InstructionContinue, nil
 	}
 }

@@ -68,7 +68,6 @@ var opcodes map[uint8]Instruction
 
 func init() {
 	opcodeList := []Instruction{
-		Instruction{"BRK", AddrImplied, 0x00, 1},
 		Instruction{"ADC", AddrImmediate, 0x69, 2},
 		Instruction{"ADC", AddrZeroPage, 0x65, 2},
 		Instruction{"ADC", AddrZeroPageX, 0x75, 2},
@@ -92,6 +91,17 @@ func init() {
 		Instruction{"ASL", AddrAbsoluteX, 0x1e, 3},
 		Instruction{"BCC", AddrImmediate, 0x90, 2},
 		Instruction{"BCS", AddrImmediate, 0xb0, 2},
+		Instruction{"BEQ", AddrImmediate, 0xf0, 2},
+		Instruction{"BIT", AddrZeroPage, 0x24, 2},
+		Instruction{"BIT", AddrAbsolute, 0x2c, 3},
+		Instruction{"BMI", AddrImmediate, 0x30, 2},
+		Instruction{"BNE", AddrImmediate, 0xd0, 2},
+		Instruction{"BPL", AddrImmediate, 0x10, 2},
+		Instruction{"BRK", AddrImplied, 0x00, 1},
+		Instruction{"BVC", AddrImmediate, 0x50, 2},
+		Instruction{"BVS", AddrImmediate, 0x70, 2},
+		Instruction{"INX", AddrImplied, 0xe8, 1},
+		Instruction{"INY", AddrImplied, 0xc8, 1},
 		Instruction{"LDA", AddrImmediate, 0xa9, 2},
 		Instruction{"LDA", AddrZeroPage, 0xa5, 2},
 		Instruction{"LDA", AddrZeroPageX, 0xb5, 2},
@@ -101,8 +111,6 @@ func init() {
 		Instruction{"LDA", AddrIndirectX, 0xa1, 3},
 		Instruction{"LDA", AddrIndirectY, 0xb1, 3},
 		Instruction{"TAX", AddrImplied, 0xaa, 1},
-		Instruction{"INX", AddrImplied, 0xe8, 1},
-		Instruction{"INY", AddrImplied, 0xc8, 1},
 	}
 
 	opcodes = make(map[uint8]Instruction)

@@ -76,21 +76,15 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 
 	case "BCC":
 		// "Branch if carry clear" operation, branches if carry bit unset
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, C_BIT_STATUS, false)
-		}
+		return generateBranchCallback(C_BIT_STATUS, false)
 
 	case "BCS":
 		// "Branch if carry set" operation, branches if carry bit set
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, C_BIT_STATUS, true)
-		}
+		return generateBranchCallback(C_BIT_STATUS, true)
 
 	case "BEQ":
 		// "Branch if equal" operation, branches if zero bit set
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, Z_BIT_STATUS, true)
-		}
+		return generateBranchCallback(Z_BIT_STATUS, true)
 
 	case "BIT":
 		// "Bit test" operation, does AND with accumulator and sets Z, V, N bits
@@ -105,32 +99,70 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 
 	case "BMI":
 		// "Branch if minus" operation, branches if nevatige bit set
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, N_BIT_STATUS, true)
-		}
+		return generateBranchCallback(N_BIT_STATUS, true)
 
 	case "BNE":
 		// "Branch not equal" operation, branches if zero bit not set
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, Z_BIT_STATUS, false)
-		}
+		return generateBranchCallback(Z_BIT_STATUS, false)
 
 	case "BPL":
 		// "Branch if positive" operation, branches if negative bit not set
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, N_BIT_STATUS, false)
-		}
+		return generateBranchCallback(N_BIT_STATUS, false)
 
 	case "BVC":
+		return generateBranchCallback(V_BIT_STATUS, false)
 		// "Branch if overflow clear" operation, branches if overflow bit not set
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, V_BIT_STATUS, false)
-		}
 
 	case "BVS":
 		// "Branch if overflow set" operation, branches if overflow bit set
+		return generateBranchCallback(V_BIT_STATUS, true)
+
+	case "CLC":
+		// "Clear cary" operation
+		return generateClearCallback(C_BIT_STATUS)
+
+	case "CLD":
+		// "Clear decimal" operation
+		return generateClearCallback(D_BIT_STATUS)
+
+	case "CLI":
+		// "Clear interrupt" operation
+		return generateClearCallback(I_BIT_STATUS)
+
+	case "CLV":
+		// "Clear overflor" operation
+		return generateClearCallback(V_BIT_STATUS)
+
+	case "CMP":
+		// "Compare" operation, sets flags as if subtrating from accumulator
+		return generateCompareCallback(c.accumulator)
+
+	case "CPX":
+		// "Compare X" operation, sets flags as if subtrating from index_x
+		return generateCompareCallback(c.index_x)
+
+	case "CPY":
+		// "Compare Y" operation, sets flags as if subtrating from index_y
+		return generateCompareCallback(c.index_y)
+
+	case "DEC":
+		// "Decrement" operation, decrements memory location
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return branchOnStatus(c, mode, V_BIT_STATUS, true)
+			value_address := c.getParameterAddress(mode)
+			value := c.memory[value_address]
+			result := value - 0x01
+			c.memory[value_address] = result
+			c.updateStatusFlags(result)
+			return InstructionContinue, nil
+		}
+
+	case "DEX":
+		// "Decrement X register" operation
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			result := c.index_x - 1
+			c.index_x = result
+			c.updateStatusFlags(result)
+			return InstructionContinue, nil
 		}
 
 	case "LDA":
@@ -233,6 +265,32 @@ func branchOnStatus(c *CPU, mode AddressMode, flag uint8, set bool) (Instruction
 		c.program_counter += uint16(value)
 		return InstructionProgramCounterUpdated, nil
 	} else {
+		return InstructionContinue, nil
+	}
+}
+
+func generateBranchCallback(status uint8, set bool) func(*CPU, AddressMode) (InstructionPostProccessingMode, error) {
+	return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+		return branchOnStatus(c, mode, status, set)
+	}
+}
+
+func generateClearCallback(bit uint8) func(*CPU, AddressMode) (InstructionPostProccessingMode, error) {
+	return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+		c.status = c.status & (bit ^ uint8(0xff))
+		return InstructionContinue, nil
+	}
+}
+
+func generateCompareCallback(register uint8) func(*CPU, AddressMode) (InstructionPostProccessingMode, error) {
+	return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+		value_address := c.getParameterAddress(mode)
+		value := c.memory[value_address]
+		result := register - value
+		c.updateStatusFlags(result)
+		if register > value {
+			c.status |= C_BIT_STATUS
+		}
 		return InstructionContinue, nil
 	}
 }

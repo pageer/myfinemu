@@ -15,10 +15,12 @@ type testInput struct {
 	memory               []uint8
 	upper_memory         []uint8
 	rom                  []uint8
+	initial              uint8
 	initial_accumulator  uint8
 	initial_index_x      uint8
 	initial_index_y      uint8
 	initial_status       uint8
+	expected             uint8
 	expected_accumulator uint8
 	expected_index_x     uint8
 	expected_index_y     uint8
@@ -438,7 +440,7 @@ func TestRun_ASL(t *testing.T) {
 		mkAbsolute("Absolute, zero, carry", 0x0e, 0x80, ZERO_BIT, 0x00, Z_BIT_STATUS|C_BIT_STATUS),
 	}
 
-	runMemoryTests(absoluteTests, uint16(0x1001))
+	runMemoryTests(absoluteTests, uint16(0x1003))
 
 	absoluteXTests := []testInput{
 		mkAbsoluteX("Absolute X, positive", 0x1e, 0x06, ZERO_BIT, 0x0c, ZERO_BIT),
@@ -523,9 +525,217 @@ func TestRun_BIT(t *testing.T) {
 	}
 }
 
+func TestRun_ClearStatus(t *testing.T) {
+	testCases := []struct {
+		name           string
+		opcode         uint8
+		initial_status uint8
+	}{
+		{name: "CLC", opcode: 0x18, initial_status: C_BIT_STATUS},
+		{name: "CLD", opcode: 0xd8, initial_status: D_BIT_STATUS},
+		{name: "CLI", opcode: 0x58, initial_status: I_BIT_STATUS},
+		{name: "CLV", opcode: 0xb8, initial_status: V_BIT_STATUS},
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			rom := []uint8{test.opcode}
+			c.LoadAndReset(rom)
+			c.status = test.initial_status
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, ZERO_BIT, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+}
+
+func TestRun_CMP(t *testing.T) {
+	testCases := []testInput{
+		mkImmediate("Immediate, positive", 0xc9, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkImmediate("Immediate, negative", 0xc9, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkImmediate("Immediate, zero", 0xc9, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPage("Zero-page, positive", 0xc5, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkZeroPage("Zero-page, negative", 0xc5, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPage("Zero-page, zero", 0xc5, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPageX("Zero-page X, positive", 0xd5, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkZeroPageX("Zero-page X, negative", 0xd5, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPageX("Zero-page X, zero", 0xd5, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsolute("Absolute, positive", 0xcd, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkAbsolute("Absolute, negative", 0xcd, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkAbsolute("Absolute, zero", 0xcd, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsoluteX("Absolute X, positive", 0xdd, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkAbsoluteX("Absolute X, negative", 0xdd, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkAbsoluteX("Absolute X, zero", 0xdd, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsoluteY("Absolute Y, positive", 0xd9, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkAbsoluteY("Absolute Y, negative", 0xd9, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkAbsoluteY("Absolute Y, zero", 0xd9, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkIndirectX("Indirect X, positive", 0xc1, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkIndirectX("Indirect X, negative", 0xc1, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkIndirectX("Indirect X, zero", 0xc1, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkIndirectY("Indirect Y, positive", 0xd1, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkIndirectY("Indirect Y, negative", 0xd1, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkIndirectY("Indirect Y, zero", 0xd1, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
+
+			initializeCpuState(c, test)
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+}
+
+func TestRun_CPX(t *testing.T) {
+	testCases := []testInput{
+		mkImmediate("Immediate, positive", 0xe0, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkImmediate("Immediate, negative", 0xe0, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkImmediate("Immediate, zero", 0xe0, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPage("Zero-page, positive", 0xe4, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkZeroPage("Zero-page, negative", 0xe4, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPage("Zero-page, zero", 0xe4, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsolute("Absolute, positive", 0xec, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkAbsolute("Absolute, negative", 0xec, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkAbsolute("Absolute, zero", 0xec, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
+
+			initializeCpuState(c, test)
+			c.index_x = test.initial_accumulator
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+}
+
+func TestRun_CPY(t *testing.T) {
+	testCases := []testInput{
+		mkImmediate("Immediate, positive", 0xc0, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkImmediate("Immediate, negative", 0xc0, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkImmediate("Immediate, zero", 0xc0, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPage("Zero-page, positive", 0xc4, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkZeroPage("Zero-page, negative", 0xc4, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPage("Zero-page, zero", 0xc4, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsolute("Absolute, positive", 0xcc, 0x02, 0x04, ZERO_BIT, C_BIT_STATUS),
+		mkAbsolute("Absolute, negative", 0xcc, 0x04, 0x02, ZERO_BIT, N_BIT_STATUS),
+		mkAbsolute("Absolute, zero", 0xcc, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
+
+			initializeCpuState(c, test)
+			c.index_y = test.initial_accumulator
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+}
+
+func TestRun_DEC(t *testing.T) {
+	// Here "initial" is used to flag if we're using upper memory
+	testCases := []testInput{
+		mkZeroPage("Zero-page, positive", 0xc6, 0x12, 0, 0x11, ZERO_BIT),
+		mkZeroPage("Zero-page, negative", 0xc6, 0xff, 0, 0xfe, N_BIT_STATUS),
+		mkZeroPage("Zero-page, negative, underflow", 0xc6, 0x00, 0, 0xff, N_BIT_STATUS),
+		mkZeroPage("Zero-page, zero", 0xc6, 0x01, 0, 0x00, Z_BIT_STATUS),
+		mkZeroPageX("Zero-page X, positive", 0xd6, 0x12, 0, 0x11, ZERO_BIT),
+		mkZeroPageX("Zero-page X, negative", 0xd6, 0xff, 0, 0xfe, N_BIT_STATUS),
+		mkZeroPageX("Zero-page X, negative, underflow", 0xd6, 0x00, 0, 0xff, N_BIT_STATUS),
+		mkZeroPageX("Zero-page X, zero", 0xd6, 0x01, 0, 0x00, Z_BIT_STATUS),
+		mkAbsolute("Absolute, positive", 0xce, 0x12, 1, 0x11, ZERO_BIT),
+		mkAbsolute("Absolute, negative", 0xce, 0xff, 1, 0xfe, N_BIT_STATUS),
+		mkAbsolute("Absolute, negative, underflow", 0xce, 0x00, 1, 0xff, N_BIT_STATUS),
+		mkAbsolute("Absolute, zero", 0xce, 0x01, 1, 0x00, Z_BIT_STATUS),
+		mkAbsoluteX("Absolute X, positive", 0xde, 0x12, 1, 0x11, ZERO_BIT),
+		mkAbsoluteX("Absolute X, negative", 0xde, 0xff, 1, 0xfe, N_BIT_STATUS),
+		mkAbsoluteX("Absolute X, negative, underflow", 0xde, 0x00, 1, 0xff, N_BIT_STATUS),
+		mkAbsoluteX("Absolute X, zero", 0xde, 0x01, 1, 0x00, Z_BIT_STATUS),
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			var address uint16
+
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
+
+			initializeCpuState(c, test)
+
+			result := c.Run()
+
+			if test.initial > 0 {
+				address = 0x1003
+			} else {
+				address = 0x03
+			}
+			value := c.memory[address]
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected, value, "Memory value not correct")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+}
+
+func TestRun_DEX(t *testing.T) {
+	testCases := []testInput{
+		{name: "Positive", initial_index_x: 0x12, expected_index_x: 0x11, expected_status: ZERO_BIT},
+		{name: "Negative", initial_index_x: 0xf4, expected_index_x: 0xf3, expected_status: N_BIT_STATUS},
+		{name: "Negative, underflow", initial_index_x: 0x00, expected_index_x: 0xff, expected_status: N_BIT_STATUS},
+		{name: "Zero", initial_index_x: 0x01, expected_index_x: 0x00, expected_status: Z_BIT_STATUS},
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset([]uint8{0xca})
+
+			initializeCpuState(c, test)
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected_index_x, c.index_x, "Index X not correct")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+}
+
 func setCommonFields(test testInput, name string, initial, expected, status uint8) testInput {
 	test.name = name
+	test.initial = initial
+	// For old tests
 	test.initial_accumulator = initial
+	test.expected = expected
+	// For old tests
 	test.expected_accumulator = expected
 	test.expected_status = status
 	return test
@@ -564,8 +774,8 @@ func mkZeroPageX(name string, opcode, param, initial, expected, status uint8) te
 
 func mkAbsolute(name string, opcode, param, initial, expected, status uint8) testInput {
 	test := testInput{
-		upper_memory: []uint8{0x00, param},
-		rom:          []uint8{opcode, 0x01, 0x10},
+		upper_memory: []uint8{0x00, 0x00, 0x00, param},
+		rom:          []uint8{opcode, 0x03, 0x10},
 	}
 	return setCommonFields(test, name, initial, expected, status)
 }

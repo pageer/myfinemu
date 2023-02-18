@@ -156,21 +156,11 @@ func TestRun_LDA(t *testing.T) {
 		mkIndirectY("Zero value, indirect Y", 0xb1, 0x00, 0x01, 0x00, Z_BIT_STATUS),
 	}
 
-	for _, test := range testCases {
-		callback := func(t *testing.T) {
-			c := NewCPU()
-			c.LoadAndReset(test.rom)
-
-			initializeCpuState(c, test)
-
-			result := c.Run()
-
-			assert.Nil(t, result, "Error was not nil")
-			assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
-			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
-		}
-		t.Run(test.name, callback)
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
 	}
+	runTestCases(t, testCases, callback)
 }
 
 func TestRun_TAX(t *testing.T) {
@@ -195,26 +185,20 @@ func TestRun_TAX(t *testing.T) {
 }
 
 func TestRun_INX_Implied(t *testing.T) {
+	rom := []uint8{0xe8}
 	testCases := []testInput{
-		{name: "Positive value", initial_index_x: 0x77, initial_status: N_BIT_STATUS | Z_BIT_STATUS, expected_index_x: 0x78, expected_status: ZERO_BIT},
-		{name: "Positive to negative", initial_index_x: 0x7f, initial_status: ZERO_BIT, expected_index_x: 0x80, expected_status: N_BIT_STATUS},
-		{name: "Negative value", initial_index_x: 0xa2, initial_status: N_BIT_STATUS, expected_index_x: 0xa3, expected_status: N_BIT_STATUS},
-		{name: "Zero value", initial_index_x: 0x00, initial_status: Z_BIT_STATUS, expected_index_x: 0x01, expected_status: ZERO_BIT},
-		{name: "Overflow", initial_index_x: 0xff, initial_status: N_BIT_STATUS, expected_index_x: 0x00, expected_status: Z_BIT_STATUS},
+		{name: "Positive value", rom: rom, initial_index_x: 0x77, initial_status: N_BIT_STATUS | Z_BIT_STATUS, expected_index_x: 0x78, expected_status: ZERO_BIT},
+		{name: "Positive to negative", rom: rom, initial_index_x: 0x7f, initial_status: ZERO_BIT, expected_index_x: 0x80, expected_status: N_BIT_STATUS},
+		{name: "Negative value", rom: rom, initial_index_x: 0xa2, initial_status: N_BIT_STATUS, expected_index_x: 0xa3, expected_status: N_BIT_STATUS},
+		{name: "Zero value", rom: rom, initial_index_x: 0x00, initial_status: Z_BIT_STATUS, expected_index_x: 0x01, expected_status: ZERO_BIT},
+		{name: "Overflow", rom: rom, initial_index_x: 0xff, initial_status: N_BIT_STATUS, expected_index_x: 0x00, expected_status: Z_BIT_STATUS},
 	}
 
-	for _, test := range testCases {
-		callback := func(t *testing.T) {
-			c := NewCPU()
-			c.LoadAndReset([]uint8{0xe8})
-			initializeCpuState(c, test)
-			c.Run()
-
-			assert.Equal(t, test.expected_index_x, c.index_x, "Index X register incorrect")
-			assert.Equal(t, test.expected_status, c.status, "Status is incorrect")
-		}
-		t.Run(test.name, callback)
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_index_x, c.index_x, "Index X register incorrect")
+		assert.Equal(t, test.expected_status, c.status, "Status is incorrect")
 	}
+	runTestCases(t, testCases, callback)
 }
 
 func TestRun_INY_Implied(t *testing.T) {
@@ -298,21 +282,11 @@ func TestRun_ADC(t *testing.T) {
 		mkIndirectY("Indirect Y, zero, carry", 0x71, 0xfb, 0x05, 0x00, C_BIT_STATUS|Z_BIT_STATUS),
 	}
 
-	for _, test := range testCases {
-		callback := func(t *testing.T) {
-			c := NewCPU()
-			c.LoadAndReset(test.rom)
-
-			initializeCpuState(c, test)
-
-			result := c.Run()
-
-			assert.Nil(t, result, "Error was not nil")
-			assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
-			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
-		}
-		t.Run(test.name, callback)
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
 	}
+	runTestCases(t, testCases, callback)
 }
 
 func TestRun_AND(t *testing.T) {
@@ -346,21 +320,11 @@ func TestRun_AND(t *testing.T) {
 		mkIndirectY("Indirect Y, zero", 0x31, 0x30, 0x01, 0x00, Z_BIT_STATUS),
 	}
 
-	for _, test := range testCases {
-		callback := func(t *testing.T) {
-			c := NewCPU()
-			c.LoadAndReset(test.rom)
-
-			initializeCpuState(c, test)
-
-			result := c.Run()
-
-			assert.Nil(t, result, "Error was not nil")
-			assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
-			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
-		}
-		t.Run(test.name, callback)
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
 	}
+	runTestCases(t, testCases, callback)
 }
 
 func TestRun_ASL(t *testing.T) {
@@ -509,20 +473,10 @@ func TestRun_BIT(t *testing.T) {
 		mkAbsolute("Absolute, AND non-zero, positive, overflow", 0x2c, 0x45, 0x40, ZERO_BIT, V_BIT_STATUS),
 	}
 
-	for _, test := range testCases {
-		callback := func(t *testing.T) {
-			c := NewCPU()
-			c.LoadAndReset(test.rom)
-
-			initializeCpuState(c, test)
-
-			result := c.Run()
-
-			assert.Nil(t, result, "Error was not nil")
-			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
-		}
-		t.Run(test.name, callback)
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
 	}
+	runTestCases(t, testCases, callback)
 }
 
 func TestRun_ClearStatus(t *testing.T) {
@@ -581,20 +535,10 @@ func TestRun_CMP(t *testing.T) {
 		mkIndirectY("Indirect Y, zero", 0xd1, 0x03, 0x03, ZERO_BIT, Z_BIT_STATUS),
 	}
 
-	for _, test := range testCases {
-		callback := func(t *testing.T) {
-			c := NewCPU()
-			c.LoadAndReset(test.rom)
-
-			initializeCpuState(c, test)
-
-			result := c.Run()
-
-			assert.Nil(t, result, "Error was not nil")
-			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
-		}
-		t.Run(test.name, callback)
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
 	}
+	runTestCases(t, testCases, callback)
 }
 
 func TestRun_CPX(t *testing.T) {
@@ -680,7 +624,11 @@ func TestRun_DEC(t *testing.T) {
 
 	for _, test := range testCases {
 		callback := func(t *testing.T) {
-			var address uint16
+			var address uint16 = 0x03
+
+			if test.initial > 0 {
+				address = 0x1003
+			}
 
 			c := NewCPU()
 			c.LoadAndReset(test.rom)
@@ -689,11 +637,6 @@ func TestRun_DEC(t *testing.T) {
 
 			result := c.Run()
 
-			if test.initial > 0 {
-				address = 0x1003
-			} else {
-				address = 0x03
-			}
 			value := c.memory[address]
 
 			assert.Nil(t, result, "Error was not nil")
@@ -705,24 +648,108 @@ func TestRun_DEC(t *testing.T) {
 }
 
 func TestRun_DEX(t *testing.T) {
+	rom := []uint8{0xca}
 	testCases := []testInput{
-		{name: "Positive", initial_index_x: 0x12, expected_index_x: 0x11, expected_status: ZERO_BIT},
-		{name: "Negative", initial_index_x: 0xf4, expected_index_x: 0xf3, expected_status: N_BIT_STATUS},
-		{name: "Negative, underflow", initial_index_x: 0x00, expected_index_x: 0xff, expected_status: N_BIT_STATUS},
-		{name: "Zero", initial_index_x: 0x01, expected_index_x: 0x00, expected_status: Z_BIT_STATUS},
+		{name: "Positive", rom: rom, initial_index_x: 0x12, expected_index_x: 0x11, expected_status: ZERO_BIT},
+		{name: "Negative", rom: rom, initial_index_x: 0xf4, expected_index_x: 0xf3, expected_status: N_BIT_STATUS},
+		{name: "Negative, underflow", rom: rom, initial_index_x: 0x00, expected_index_x: 0xff, expected_status: N_BIT_STATUS},
+		{name: "Zero", rom: rom, initial_index_x: 0x01, expected_index_x: 0x00, expected_status: Z_BIT_STATUS},
+	}
+
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_index_x, c.index_x, "Index X not correct")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+	}
+	runTestCases(t, testCases, callback)
+}
+
+func TestRun_DEY(t *testing.T) {
+	rom := []uint8{0x88}
+	testCases := []testInput{
+		{name: "Positive", rom: rom, initial_index_y: 0x12, expected_index_y: 0x11, expected_status: ZERO_BIT},
+		{name: "Negative", rom: rom, initial_index_y: 0xf4, expected_index_y: 0xf3, expected_status: N_BIT_STATUS},
+		{name: "Negative, underflow", rom: rom, initial_index_y: 0x00, expected_index_y: 0xff, expected_status: N_BIT_STATUS},
+		{name: "Zero", rom: rom, initial_index_y: 0x01, expected_index_y: 0x00, expected_status: Z_BIT_STATUS},
+	}
+
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_index_y, c.index_y, "Index X not correct")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+	}
+	runTestCases(t, testCases, callback)
+}
+
+func TestRun_EOR(t *testing.T) {
+	testCases := []testInput{
+		mkImmediate("Immediate, positive", 0x49, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkImmediate("Immediate, negative", 0x49, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkImmediate("Immediate, zero", 0x49, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkZeroPage("Zero-page, positive", 0x45, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkZeroPage("Zero-page, negative", 0x45, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkZeroPage("Zero-page, zero", 0x45, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkZeroPageX("Zero-page X, positive", 0x55, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkZeroPageX("Zero-page X, negative", 0x55, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkZeroPageX("Zero-page X, zero", 0x55, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkAbsolute("Absolute, positive", 0x4d, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkAbsolute("Absolute, negative", 0x4d, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkAbsolute("Absolute, zero", 0x4d, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkAbsoluteX("Absolute X, positive", 0x5d, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkAbsoluteX("Absolute X, negative", 0x5d, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkAbsoluteX("Absolute X, zero", 0x5d, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkAbsoluteY("Absolute Y, positive", 0x59, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkAbsoluteY("Absolute Y, negative", 0x59, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkAbsoluteY("Absolute Y, zero", 0x59, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkIndirectX("Indirect X, positive", 0x41, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkIndirectX("Indirect X, negative", 0x41, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkIndirectX("Indirect X, zero", 0x41, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+		mkIndirectY("Indirect Y, positive", 0x51, 0xff, 0xf2, 0x0d, ZERO_BIT),
+		mkIndirectY("Indirect Y, negative", 0x51, 0xf0, 0x0f, 0xff, N_BIT_STATUS),
+		mkIndirectY("Indirect Y, zero", 0x51, 0x0f, 0x0f, 0x00, Z_BIT_STATUS),
+	}
+
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator not correct")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+	}
+	runTestCases(t, testCases, callback)
+}
+
+func TestRun_INC(t *testing.T) {
+	// Here "initial" is used to flag if we're using upper memory
+	testCases := []testInput{
+		mkZeroPage("Zero-page, positive", 0xe6, 0x12, 0, 0x13, ZERO_BIT),
+		mkZeroPage("Zero-page, negative", 0xe6, 0x7f, 0, 0x80, N_BIT_STATUS),
+		mkZeroPage("Zero-page, zero, overflow", 0xe6, 0xff, 0, 0x00, Z_BIT_STATUS),
+		mkZeroPageX("Zero-page X, positive", 0xf6, 0x12, 0, 0x13, ZERO_BIT),
+		mkZeroPageX("Zero-page X, negative", 0xf6, 0x7f, 0, 0x80, N_BIT_STATUS),
+		mkZeroPageX("Zero-page X, negative, overflow", 0xf6, 0xff, 0, 0x00, Z_BIT_STATUS),
+		mkAbsolute("Absolute, positive", 0xee, 0x12, 1, 0x13, ZERO_BIT),
+		mkAbsolute("Absolute, negative", 0xee, 0x7f, 1, 0x80, N_BIT_STATUS),
+		mkAbsolute("Absolute, negative, overflow", 0xee, 0xff, 1, 0x00, Z_BIT_STATUS),
+		mkAbsoluteX("Absolute X, positive", 0xfe, 0x12, 1, 0x13, ZERO_BIT),
+		mkAbsoluteX("Absolute X, negative", 0xfe, 0x7f, 1, 0x80, N_BIT_STATUS),
+		mkAbsoluteX("Absolute X, negative, overflow", 0xfe, 0xff, 1, 0x00, Z_BIT_STATUS),
 	}
 
 	for _, test := range testCases {
 		callback := func(t *testing.T) {
+			var address uint16 = 0x03
+
+			if test.initial > 0 {
+				address = 0x1003
+			}
+
 			c := NewCPU()
-			c.LoadAndReset([]uint8{0xca})
+			c.LoadAndReset(test.rom)
 
 			initializeCpuState(c, test)
 
 			result := c.Run()
 
+			value := c.memory[address]
+
 			assert.Nil(t, result, "Error was not nil")
-			assert.Equal(t, test.expected_index_x, c.index_x, "Index X not correct")
+			assert.Equal(t, test.expected, value, "Memory value not correct")
 			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
 		}
 		t.Run(test.name, callback)
@@ -826,4 +853,21 @@ func mkIndirectY(name string, opcode, value, initial, expected, status uint8) te
 		initial_index_y: 0x01,
 	}
 	return setCommonFields(test, name, initial, expected, status)
+}
+
+func runTestCases(t *testing.T, testCases []testInput, assertion_callback func(*testing.T, *CPU, testInput)) {
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
+
+			initializeCpuState(c, test)
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assertion_callback(t, c, test)
+		}
+		t.Run(test.name, callback)
+	}
 }

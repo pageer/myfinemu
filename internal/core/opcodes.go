@@ -165,6 +165,25 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 			return InstructionContinue, nil
 		}
 
+	case "DEY":
+		// "Decrement Y register" operation
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			result := c.index_y - 1
+			c.index_y = result
+			c.updateStatusFlags(result)
+			return InstructionContinue, nil
+		}
+
+	case "EOR":
+		// "Exclusive OR" operation, XOR on accumulator with memory location
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			value_address := c.getParameterAddress(mode)
+			value := c.memory[value_address]
+			c.accumulator = c.accumulator ^ value
+			c.updateStatusFlags(c.accumulator)
+			return InstructionContinue, nil
+		}
+
 	case "LDA":
 		// "Load accumulator" operation.
 		// Stores the parameter into the A register.

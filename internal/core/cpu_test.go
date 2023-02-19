@@ -756,6 +756,84 @@ func TestRun_INC(t *testing.T) {
 	}
 }
 
+func TestRun_JMP_Absolute(t *testing.T) {
+	c := NewCPU()
+	// Jump to an LDA of 42, with break immediately next
+	c.LoadAndReset([]uint8{0x4c, 0x04, 0x80, 0x00, 0xa9, 0x42, 0x00})
+
+	result := c.Run()
+
+	assert.Nil(t, result, "Error was not nil")
+	// PC ends on next instruction after the BRK
+	assert.Equal(t, uint16(0x8007), c.program_counter, "Program counter incorrect")
+	assert.Equal(t, uint8(0x42), c.accumulator, "Memory value not correct")
+}
+
+func TestRun_JMP_Indirect(t *testing.T) {
+	c := NewCPU()
+	// Jump to an LDA of 42, with break immediately next
+	c.LoadAndReset([]uint8{0x6c, 0x03, 0x00, 0x00, 0xa9, 0x42, 0x00})
+	c.memory[0x03] = 0x04
+	c.memory[0x04] = 0x80
+
+	result := c.Run()
+
+	assert.Nil(t, result, "Error was not nil")
+	// PC ends on next instruction after the BRK
+	assert.Equal(t, uint16(0x8007), c.program_counter, "Program counter incorrect")
+	assert.Equal(t, uint8(0x42), c.accumulator, "Memory value not correct")
+}
+
+func TestRun_JSR(t *testing.T) {
+	c := NewCPU()
+	// Jump to an LDA of 42, with break immediately next
+	c.LoadAndReset([]uint8{0x20, 0x05, 0x80, 0xc9, 0xb9, 0xa9, 0x42, 0x00})
+
+	result := c.Run()
+
+	assert.Nil(t, result, "Error was not nil")
+	// PC ends on next instruction after the BRK
+	assert.Equal(t, uint16(0x8008), c.program_counter, "Program counter incorrect")
+	assert.Equal(t, uint8(0x02), c.stack_pointer, "Stack pointer incorrect")
+	assert.Equal(t, uint8(0x02), c.memory[0x0100], "Stack low byte incorrect")
+	assert.Equal(t, uint8(0x80), c.memory[0x0101], "Stack high byte pointer incorrect")
+	assert.Equal(t, uint8(0x42), c.accumulator, "Memory value not correct")
+}
+
+func TestRun_LDX(t *testing.T) {
+	testCases := []testInput{
+		mkImmediate("Positive value immediate", 0xa2, 0x7b, 0x00, 0x7b, ZERO_BIT),
+		mkImmediate("Negative value immediate", 0xa2, 0xfb, 0x00, 0xfb, N_BIT_STATUS),
+		mkImmediate("Zero value immediate", 0xa2, 0x00, 0x01, 0x00, Z_BIT_STATUS),
+		mkAbsolute("Positive value absolute", 0xae, 0x7b, 0x00, 0x7b, ZERO_BIT),
+		mkAbsolute("Negative value absolute", 0xae, 0xfb, 0x00, 0xfb, N_BIT_STATUS),
+		mkAbsolute("Zero value absolute", 0xae, 0x00, 0x01, 0x00, Z_BIT_STATUS),
+		mkAbsoluteY("Positive value absolute Y", 0xbe, 0x7b, 0x00, 0x7b, ZERO_BIT),
+		mkAbsoluteY("Negative value absolute Y", 0xbe, 0xfb, 0x00, 0xfb, N_BIT_STATUS),
+		mkAbsoluteY("Zero value absolute Y", 0xbe, 0x00, 0x01, 0x00, Z_BIT_STATUS),
+		mkZeroPage("Positive value zero-page", 0xa6, 0x7b, 0x00, 0x7b, ZERO_BIT),
+		mkZeroPage("Negative value zero-page", 0xa6, 0xfb, 0x00, 0xfb, N_BIT_STATUS),
+		mkZeroPage("Zero value zero-page", 0xa6, 0x00, 0x01, 0x00, Z_BIT_STATUS),
+		mkZeroPageY("Positive value zero-page Y", 0xb6, 0x7b, 0x00, 0x7b, ZERO_BIT),
+		mkZeroPageY("Negative value zero-page Y", 0xb6, 0xfb, 0x00, 0xfb, N_BIT_STATUS),
+		mkZeroPageY("Zero value zero-page Y", 0xb6, 0x00, 0x01, 0x00, Z_BIT_STATUS),
+		{
+			name:            "Positive value zero-page Y, wrap-around",
+			memory:          []uint8{0x00, 0x7b},
+			rom:             []uint8{0xb6, 0xfe},
+			initial_index_y: 0x03,
+			expected:        0x7b,
+			expected_status: ZERO_BIT,
+		},
+	}
+
+	callback := func(t *testing.T, c *CPU, test testInput) {
+		assert.Equal(t, test.expected, c.index_x, "Index X incorrect")
+		assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+	}
+	runTestCases(t, testCases, callback)
+}
+
 func setCommonFields(test testInput, name string, initial, expected, status uint8) testInput {
 	test.name = name
 	test.initial = initial
@@ -795,6 +873,15 @@ func mkZeroPageX(name string, opcode, param, initial, expected, status uint8) te
 		memory:          []uint8{0x00, 0x00, 0x00, param},
 		rom:             []uint8{opcode, 0x01},
 		initial_index_x: 0x02,
+	}
+	return setCommonFields(test, name, initial, expected, status)
+}
+
+func mkZeroPageY(name string, opcode, param, initial, expected, status uint8) testInput {
+	test := testInput{
+		memory:          []uint8{0x00, 0x00, 0x00, param},
+		rom:             []uint8{opcode, 0x01},
+		initial_index_y: 0x02,
 	}
 	return setCommonFields(test, name, initial, expected, status)
 }
@@ -855,13 +942,19 @@ func mkIndirectY(name string, opcode, value, initial, expected, status uint8) te
 	return setCommonFields(test, name, initial, expected, status)
 }
 
-func runTestCases(t *testing.T, testCases []testInput, assertion_callback func(*testing.T, *CPU, testInput)) {
+func runTestCasesWithSetup(
+	t *testing.T,
+	testCases []testInput,
+	setup_callback func(*testing.T, *CPU, testInput),
+	assertion_callback func(*testing.T, *CPU, testInput),
+) {
 	for _, test := range testCases {
 		callback := func(t *testing.T) {
 			c := NewCPU()
 			c.LoadAndReset(test.rom)
 
 			initializeCpuState(c, test)
+			setup_callback(t, c, test)
 
 			result := c.Run()
 
@@ -870,4 +963,8 @@ func runTestCases(t *testing.T, testCases []testInput, assertion_callback func(*
 		}
 		t.Run(test.name, callback)
 	}
+}
+
+func runTestCases(t *testing.T, testCases []testInput, assertion_callback func(*testing.T, *CPU, testInput)) {
+	runTestCasesWithSetup(t, testCases, func(t *testing.T, c *CPU, input testInput) {}, assertion_callback)
 }

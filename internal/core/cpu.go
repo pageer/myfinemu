@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"pageer/myfinemu/internal/logging"
 )
 
 const (
@@ -18,6 +19,7 @@ const (
 	// Memory locations
 	MEMORY_SIZE              = 0x010000
 	ROM_SEGMENT_START uint16 = 0x8000
+	STACK_START       uint16 = 0x0100
 	PC_RESET_ADDRESS         = 0xfffc
 )
 
@@ -33,6 +35,9 @@ const (
 	// Single byte address, but reg X is added to it.
 	// if x = 1, "$c0,x" = value at address 0xc1
 	AddrZeroPageX
+	// Single byte address, but reg y is added to it.
+	// if x = 1, "$c0,x" = value at address 0xc1
+	AddrZeroPageY
 	// Two-byte absolute address - $c000 = value at address 0xc000
 	AddrAbsolute
 	// Two-byte absolute address with reg X added to it.
@@ -41,10 +46,16 @@ const (
 	// Two-byte absolute address with reg Y added to it.
 	// e.g. if y = 1, $c000,y = value at address 0xc001
 	AddrAbsoluteY
+	// Indexed indirect - take param and add X reg (with zero-page wrap-around) to get address.
+	// e.g. if x = 1 and param = 2, address = 0x0003
 	AddrIndirectX
+	// Indirect indexed - similar to above, but reads address at param and then adds Y.
+	// e.g. if y = 2, param = 0x10, and byte at 0x10 = 7, then the address is 0x009.
 	AddrIndirectY
 	// No explicit address needed - the parameter is implied by the instruction
 	AddrImplied
+	// Indirect address accessed via stack.  Only used for JMP instruction.
+	AddrIndirect
 )
 
 type CPU struct {
@@ -132,8 +143,15 @@ func init() {
 		{"EOR", AddrAbsoluteY, 0x59, 3},
 		{"EOR", AddrIndirectX, 0x41, 2},
 		{"EOR", AddrIndirectY, 0x51, 2},
+		{"INC", AddrZeroPage, 0xe6, 2},
+		{"INC", AddrZeroPageX, 0xf6, 2},
+		{"INC", AddrAbsolute, 0xee, 3},
+		{"INC", AddrAbsoluteX, 0xfe, 3},
 		{"INX", AddrImplied, 0xe8, 1},
 		{"INY", AddrImplied, 0xc8, 1},
+		{"JMP", AddrAbsolute, 0x4c, 3},
+		{"JMP", AddrIndirect, 0x6c, 3},
+		{"JSR", AddrAbsolute, 0x20, 3},
 		{"LDA", AddrImmediate, 0xa9, 2},
 		{"LDA", AddrZeroPage, 0xa5, 2},
 		{"LDA", AddrZeroPageX, 0xb5, 2},
@@ -142,6 +160,11 @@ func init() {
 		{"LDA", AddrAbsoluteY, 0xb9, 3},
 		{"LDA", AddrIndirectX, 0xa1, 3},
 		{"LDA", AddrIndirectY, 0xb1, 3},
+		{"LDX", AddrImmediate, 0xa2, 2},
+		{"LDX", AddrZeroPage, 0xa6, 2},
+		{"LDX", AddrZeroPageY, 0xb6, 2},
+		{"LDX", AddrAbsolute, 0xae, 3},
+		{"LDX", AddrAbsoluteY, 0xbe, 3},
 		{"TAX", AddrImplied, 0xaa, 1},
 	}
 
@@ -160,8 +183,7 @@ func (c *CPU) Run() error {
 	var keepLooping bool = true
 	var err error
 	for keepLooping {
-		instruction := c.getNextInstructionByte()
-		keepLooping, err = c.processInstruction(instruction)
+		keepLooping, err = c.processNextInstruction()
 		if err != nil {
 			return err
 		}
@@ -194,7 +216,6 @@ func (c *CPU) Reset() {
 	c.status = 0
 
 	c.program_counter = c.readAddressValue(PC_RESET_ADDRESS)
-	c.program_counter = ROM_SEGMENT_START
 }
 
 func (c *CPU) LoadAndReset(memory []uint8) error {
@@ -218,23 +239,36 @@ func (c *CPU) readAddressValue(address uint16) uint16 {
 // Write a little-endian 2-byte value to the given location
 func (c *CPU) writeAddressValue(address uint16, value uint16) {
 	low := uint8(value & 0x00ff)
-	high := uint8(value & 0xff00)
+	high := uint8((value & 0xff00) >> 8)
 	c.memory[address] = low
 	c.memory[address+1] = high
 }
 
-func (c *CPU) getNextInstructionByte() uint8 {
-	result := c.memory[c.program_counter]
-	c.program_counter++
-	return result
+func (c *CPU) pushStack(value uint8) {
+	c.memory[STACK_START+uint16(c.stack_pointer)] = value
+	c.stack_pointer++
 }
 
-func (c *CPU) processInstruction(instruction uint8) (bool, error) {
+func (c *CPU) pushStackAddress(address uint16) {
+	c.writeAddressValue(STACK_START+uint16(c.stack_pointer), address)
+	c.stack_pointer += 2
+}
+
+func (c *CPU) popStack() uint8 {
+	c.stack_pointer--
+	return c.memory[STACK_START+uint16(c.stack_pointer)]
+}
+
+func (c *CPU) processNextInstruction() (bool, error) {
+	instruction := c.memory[c.program_counter]
 	operation := opcodes[instruction]
+	init_pc := c.program_counter
+	c.program_counter++
 	postProcessing, err := c.runOpcode(operation)
 	if postProcessing != InstructionProgramCounterUpdated {
 		c.program_counter += uint16(operation.size - 1)
 	}
+	logging.LogDebug("Instruction: %#v, PC start: %#v, PC end: %#v", operation, init_pc, c.program_counter)
 	return postProcessing != InstructionHalt, err
 }
 
@@ -259,18 +293,21 @@ func (c *CPU) clearFlag(flag uint8) {
 	c.status = c.status & (0xff ^ flag)
 }
 
-// Gets the address to read for the parameter to an opcode.
-func (c *CPU) getParameterAddress(mode AddressMode) uint16 {
+// Gets the value for the parameter to an opcode.
+// This looks at the address mode and then looks up and
+// returns the appropriate value from memory.
+func (c *CPU) getParameterValue(mode AddressMode) uint16 {
 	param_address := c.program_counter
 	switch mode {
 	case AddrImmediate:
-		// In immediate mode, the next byte is the param address
+		// In immediate mode, the next byte is the param
 		return param_address
 	case AddrZeroPage:
 		return uint16(c.memory[param_address])
 	case AddrZeroPageX:
-		//return modularAdd(c.memory[param_address], c.index_x)
 		return modularAdd(c.memory[param_address], c.index_x)
+	case AddrZeroPageY:
+		return modularAdd(c.memory[param_address], c.index_y)
 	case AddrAbsolute:
 		return c.readAddressValue(param_address)
 	case AddrAbsoluteX:

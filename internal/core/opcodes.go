@@ -28,7 +28,7 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 		// and carry bit 1.
 		// NOTE: Apparently the NES CPU doesn't have a decimal mode, so BCD is ignored.
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
+			value_address := c.getParameterValue(mode)
 			value := c.memory[value_address]
 
 			carry_bit := uint8(0)
@@ -46,7 +46,7 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 
 	case "AND":
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
+			value_address := c.getParameterValue(mode)
 			value := c.memory[value_address]
 			c.accumulator = c.accumulator & value
 			c.updateStatusFlags(c.accumulator)
@@ -65,7 +65,7 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 				c.accumulator = value
 				c.updateStatusFlags(c.accumulator)
 			} else {
-				value_address := c.getParameterAddress(mode)
+				value_address := c.getParameterValue(mode)
 				value, carry = shiftLeftWithCarry(c.memory[value_address])
 				c.memory[value_address] = value
 				c.updateStatusFlags(value)
@@ -89,7 +89,7 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 	case "BIT":
 		// "Bit test" operation, does AND with accumulator and sets Z, V, N bits
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
+			value_address := c.getParameterValue(mode)
 			value := c.memory[value_address]
 			result := c.accumulator & value
 			c.updateStatusFlags(result)
@@ -108,6 +108,15 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 	case "BPL":
 		// "Branch if positive" operation, branches if negative bit not set
 		return generateBranchCallback(N_BIT_STATUS, false)
+
+	case "BRK":
+		// "Break", generates an interrupt
+		// TODO: Push program counter and processor status to stack, load IRQ
+		// interrupt vector at $FFFE/F to PC, and set break flag.
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			//c.status = c.status | B_BIT_STATUS
+			return InstructionHalt, nil
+		}
 
 	case "BVC":
 		return generateBranchCallback(V_BIT_STATUS, false)
@@ -148,7 +157,7 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 	case "DEC":
 		// "Decrement" operation, decrements memory location
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
+			value_address := c.getParameterValue(mode)
 			value := c.memory[value_address]
 			result := value - 0x01
 			c.memory[value_address] = result
@@ -177,31 +186,26 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 	case "EOR":
 		// "Exclusive OR" operation, XOR on accumulator with memory location
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
+			value_address := c.getParameterValue(mode)
 			value := c.memory[value_address]
 			c.accumulator = c.accumulator ^ value
 			c.updateStatusFlags(c.accumulator)
 			return InstructionContinue, nil
 		}
 
-	case "LDA":
-		// "Load accumulator" operation.
-		// Stores the parameter into the A register.
+	case "INC":
+		// "Increment memory" operation.
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value_address := c.getParameterAddress(mode)
+			var result uint8
+			value_address := c.getParameterValue(mode)
 			value := c.memory[value_address]
-			c.accumulator = value
-			c.updateStatusFlags(value)
-			return InstructionContinue, nil
-		}
-
-	case "TAX":
-		// "Transfer A to X"
-		// Copies the value in the accumulator to the index X register.
-		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			value := c.accumulator
-			c.index_x = value
-			c.updateStatusFlags(c.index_x)
+			if result == 0xff {
+				result = 0
+			} else {
+				result = value + 1
+			}
+			c.memory[value_address] = result
+			c.updateStatusFlags(result)
 			return InstructionContinue, nil
 		}
 
@@ -231,12 +235,59 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 			return InstructionContinue, nil
 		}
 
-	case "BRK":
-		// "Break"
-		// Stop execution
+	case "JMP":
+		// "Jump" instruction
 		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-			return InstructionHalt, nil
+			param := c.readAddressValue(c.program_counter)
+			if mode == AddrIndirect {
+				param = c.readAddressValue(param)
+			}
+			c.program_counter = param
+			return InstructionProgramCounterUpdated, nil
 		}
+
+	case "JSR":
+		// "Jump to SubRoutine" operation
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			param := c.readAddressValue(c.program_counter)
+			// Return address is next instruction, minus 1
+			return_addr := c.program_counter + uint16(0x0001)
+			c.pushStackAddress(return_addr)
+			c.program_counter = param
+			return InstructionProgramCounterUpdated, nil
+		}
+
+	case "LDA":
+		// "Load accumulator" operation.
+		// Stores the parameter into the A register.
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			value_address := c.getParameterValue(mode)
+			value := c.memory[value_address]
+			c.accumulator = value
+			c.updateStatusFlags(value)
+			return InstructionContinue, nil
+		}
+
+	case "LDX":
+		// "Load reg X" operation - stores the parameter into the X register.
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			value_address := c.getParameterValue(mode)
+			value := c.memory[value_address]
+			c.index_x = value
+			c.updateStatusFlags(value)
+			return InstructionContinue, nil
+		}
+
+	case "TAX":
+		// "Transfer A to X"
+		// Copies the value in the accumulator to the index X register.
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			value := c.accumulator
+			c.index_x = value
+			c.updateStatusFlags(c.index_x)
+			return InstructionContinue, nil
+		}
+
 	}
 
 	return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
@@ -272,7 +323,7 @@ func setCarryFlag(c *CPU, carry bool) {
 
 func branchOnStatus(c *CPU, mode AddressMode, flag uint8, set bool) (InstructionPostProccessingMode, error) {
 	var do_branch bool
-	value_address := c.getParameterAddress(mode)
+	value_address := c.getParameterValue(mode)
 	value := c.memory[value_address]
 	if set {
 		do_branch = c.status&flag > 0
@@ -303,7 +354,7 @@ func generateClearCallback(bit uint8) func(*CPU, AddressMode) (InstructionPostPr
 
 func generateCompareCallback(register uint8) func(*CPU, AddressMode) (InstructionPostProccessingMode, error) {
 	return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
-		value_address := c.getParameterAddress(mode)
+		value_address := c.getParameterValue(mode)
 		value := c.memory[value_address]
 		result := register - value
 		c.updateStatusFlags(result)

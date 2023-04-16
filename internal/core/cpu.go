@@ -56,6 +56,8 @@ const (
 	AddrImplied
 	// Indirect address accessed via stack.  Only used for JMP instruction.
 	AddrIndirect
+	// No address, operate directly on the accumulator
+	AddrAccumulator
 )
 
 type CPU struct {
@@ -165,6 +167,29 @@ func init() {
 		{"LDX", AddrZeroPageY, 0xb6, 2},
 		{"LDX", AddrAbsolute, 0xae, 3},
 		{"LDX", AddrAbsoluteY, 0xbe, 3},
+		{"LDY", AddrImmediate, 0xa0, 2},
+		{"LDY", AddrZeroPage, 0xa4, 2},
+		{"LDY", AddrZeroPageX, 0xb4, 2},
+		{"LDY", AddrAbsolute, 0xac, 3},
+		{"LDY", AddrAbsoluteX, 0xbc, 3},
+		{"LSR", AddrAccumulator, 0x4a, 1},
+		{"LSR", AddrZeroPage, 0x46, 2},
+		{"LSR", AddrZeroPageX, 0x56, 2},
+		{"LSR", AddrAbsolute, 0x4e, 3},
+		{"LSR", AddrAbsoluteX, 0x5e, 3},
+		{"NOP", AddrImplied, 0xea, 1},
+		{"ORA", AddrImmediate, 0x09, 2},
+		{"ORA", AddrZeroPage, 0x05, 2},
+		{"ORA", AddrZeroPageX, 0x15, 2},
+		{"ORA", AddrAbsolute, 0x0d, 3},
+		{"ORA", AddrAbsoluteX, 0x1d, 3},
+		{"ORA", AddrAbsoluteY, 0x19, 3},
+		{"ORA", AddrIndirectX, 0x01, 2},
+		{"ORA", AddrIndirectY, 0x11, 2},
+		{"PHA", AddrImplied, 0x48, 1},
+		{"PHP", AddrImplied, 0x08, 1},
+		{"PLA", AddrImplied, 0x68, 1},
+
 		{"TAX", AddrImplied, 0xaa, 1},
 	}
 

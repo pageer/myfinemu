@@ -278,6 +278,76 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 			return InstructionContinue, nil
 		}
 
+	case "LDY":
+		// "Load reg Y" operation - stores the parameter into the Y register.
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			value_address := c.getParameterValue(mode)
+			value := c.memory[value_address]
+			c.index_y = value
+			c.updateStatusFlags(value)
+			return InstructionContinue, nil
+		}
+
+	case "LSR":
+		// "Logical shift right" operation
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			var init_value, new_value uint8
+			if mode == AddrAccumulator {
+				init_value = c.accumulator
+				new_value = init_value >> 1
+				c.accumulator = new_value
+			} else {
+				value_address := c.getParameterValue(mode)
+				init_value = c.memory[value_address]
+				new_value = init_value >> 1
+				c.memory[value_address] = new_value
+			}
+			if init_value&uint8(0x01) > 0 {
+				c.setFlag(C_BIT_STATUS)
+			} else {
+				c.clearFlag(C_BIT_STATUS)
+			}
+			c.updateStatusFlags(new_value)
+			return InstructionContinue, nil
+		}
+
+	case "NOP":
+		// "No-op" instruction
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			return InstructionContinue, nil
+		}
+
+	case "ORA":
+		// "OR with accumulator" instruction
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			value := c.memory[c.getParameterValue(mode)]
+			c.accumulator = c.accumulator | value
+			c.updateStatusFlags(c.accumulator)
+			return InstructionContinue, nil
+		}
+
+	case "PHA":
+		// "Push accumulator to stack" instruction
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			c.pushStack(c.accumulator)
+			return InstructionContinue, nil
+		}
+
+	case "PHP":
+		// "Push status register to stack" instruction
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			c.pushStack(c.status)
+			return InstructionContinue, nil
+		}
+
+	case "PLA":
+		// "Pull stack to accumulator" instruction
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			c.accumulator = c.popStack()
+			c.updateStatusFlags(c.accumulator)
+			return InstructionContinue, nil
+		}
+
 	case "TAX":
 		// "Transfer A to X"
 		// Copies the value in the accumulator to the index X register.

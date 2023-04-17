@@ -189,6 +189,12 @@ func init() {
 		{"PHA", AddrImplied, 0x48, 1},
 		{"PHP", AddrImplied, 0x08, 1},
 		{"PLA", AddrImplied, 0x68, 1},
+		{"PLP", AddrImplied, 0x28, 1},
+		{"ROL", AddrAccumulator, 0x2a, 1},
+		{"ROL", AddrZeroPage, 0x26, 2},
+		{"ROL", AddrZeroPageX, 0x36, 2},
+		{"ROL", AddrAbsolute, 0x2e, 3},
+		{"ROL", AddrAbsoluteX, 0x3e, 3},
 
 		{"TAX", AddrImplied, 0xaa, 1},
 	}

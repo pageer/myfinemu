@@ -1075,6 +1075,140 @@ func TestRun_PLA_Zero(t *testing.T) {
 	assert.Equal(t, ZERO_BIT, c.stack_pointer, "Stack pointer incorrect")
 }
 
+func TestRun_PLP(t *testing.T) {
+	c := NewCPU()
+	c.LoadAndReset([]uint8{0x28})
+	c.pushStack(0xff)
+	c.status = ZERO_BIT
+
+	result := c.Run()
+
+	assert.Nil(t, result, "Error was not nil")
+	assert.Equal(t, uint8(0xff), c.status, "Status incorrect")
+	assert.Equal(t, ZERO_BIT, c.stack_pointer, "Stack pointer incorrect")
+}
+
+func TestRun_ROL(t *testing.T) {
+	runMemoryTests := func(testCases []testInput, location uint16) {
+		for _, test := range testCases {
+			callback := func(t *testing.T) {
+				c := NewCPU()
+				c.LoadAndReset(test.rom)
+
+				initializeCpuState(c, test)
+
+				result := c.Run()
+
+				assert.Nil(t, result, "Error was not nil")
+				assert.Equal(t, test.expected_accumulator, c.memory[location], "Memory value incorrect")
+				assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+			}
+			t.Run(test.name, callback)
+		}
+	}
+
+	testCases := []testInput{
+		mkAccumulatorWithStatus("Accumulator, positive, zero status", 0x2a, 0x03, 0x06, ZERO_BIT, ZERO_BIT),
+		mkAccumulatorWithStatus("Accumulator, positive, carry status", 0x2a, 0x03, 0x07, C_BIT_STATUS, ZERO_BIT),
+		mkAccumulatorWithStatus("Accumulator, positive, zero status, carry", 0x2a, 0x83, 0x06, ZERO_BIT, C_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, positive, carry status, carry", 0x2a, 0x83, 0x07, C_BIT_STATUS, C_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, negative, zero status", 0x2a, 0x47, 0x8e, ZERO_BIT, N_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, negative, carry status", 0x2a, 0x47, 0x8f, C_BIT_STATUS, N_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, negative, zero status, carry", 0x2a, 0xc6, 0x8c, ZERO_BIT, N_BIT_STATUS|C_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, negative, carry status, carry", 0x2a, 0xc6, 0x8d, C_BIT_STATUS, N_BIT_STATUS|C_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, zero, zero status", 0x2a, 0x00, 0x00, ZERO_BIT, Z_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, zero, carry status", 0x2a, 0x00, 0x01, C_BIT_STATUS, ZERO_BIT),
+		mkAccumulatorWithStatus("Accumulator, zero, zero status, carry", 0x2a, 0x80, 0x00, ZERO_BIT, Z_BIT_STATUS|C_BIT_STATUS),
+		mkAccumulatorWithStatus("Accumulator, zero, carry status, carry", 0x2a, 0x80, 0x01, C_BIT_STATUS, C_BIT_STATUS),
+	}
+
+	for _, test := range testCases {
+		callback := func(t *testing.T) {
+			c := NewCPU()
+			c.LoadAndReset(test.rom)
+
+			initializeCpuState(c, test)
+
+			result := c.Run()
+
+			assert.Nil(t, result, "Error was not nil")
+			assert.Equal(t, test.expected_accumulator, c.accumulator, "Accumulator incorrect")
+			assert.Equal(t, test.expected_status, c.status, "Status incorrect")
+		}
+		t.Run(test.name, callback)
+	}
+
+	// For this, initial_accumulator and expected_accumulator do double-duty assert
+	// the memory location and expected value resectively.
+	memoryTestCases := []testInput{
+		mkZeroPageWithStatus("Zero-page, positive, zero status", 0x26, 0x06, ZERO_BIT, 0x0c, ZERO_BIT, ZERO_BIT),
+		mkZeroPageWithStatus("Zero-page, positive, carry status", 0x26, 0x06, ZERO_BIT, 0x0d, C_BIT_STATUS, ZERO_BIT),
+		mkZeroPageWithStatus("Zero-page, positive, zero status, carry", 0x26, 0x84, ZERO_BIT, 0x08, ZERO_BIT, C_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, positive, carry status, carry", 0x26, 0x84, ZERO_BIT, 0x09, C_BIT_STATUS, C_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, negative, zero staus", 0x26, 0x66, ZERO_BIT, 0xcc, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, negative, carry_status", 0x26, 0x66, ZERO_BIT, 0xcd, C_BIT_STATUS, N_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, negative, zero status, carry", 0x26, 0xc2, ZERO_BIT, 0x84, ZERO_BIT, N_BIT_STATUS|C_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, negative, carry status, carry", 0x26, 0xc2, ZERO_BIT, 0x85, C_BIT_STATUS, N_BIT_STATUS|C_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, zero, zero status", 0x26, 0x00, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, zero, carry status", 0x26, 0x00, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, zero, zero status, carry", 0x26, 0x80, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS|C_BIT_STATUS),
+		mkZeroPageWithStatus("Zero-page, zero, carry status, carry", 0x26, 0x80, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS|C_BIT_STATUS),
+	}
+
+	runMemoryTests(memoryTestCases, uint16(0x03))
+
+	zeroPageXTests := []testInput{
+		mkZeroPageXWithStatus("Zero-page X, positive, zero status", 0x36, 0x06, ZERO_BIT, 0x0c, ZERO_BIT, ZERO_BIT),
+		mkZeroPageXWithStatus("Zero-page X, positive, carry status", 0x36, 0x06, ZERO_BIT, 0x0d, C_BIT_STATUS, ZERO_BIT),
+		mkZeroPageXWithStatus("Zero-page X, positive, zero status, carry", 0x36, 0x84, ZERO_BIT, 0x08, ZERO_BIT, C_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, positive, carry status, carry", 0x36, 0x84, ZERO_BIT, 0x09, C_BIT_STATUS, C_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, negative, zero status", 0x36, 0x66, ZERO_BIT, 0xcc, ZERO_BIT, N_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, negative, carry status", 0x36, 0x66, ZERO_BIT, 0xcd, C_BIT_STATUS, N_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, negative, zero status, carry", 0x36, 0xc2, ZERO_BIT, 0x84, ZERO_BIT, N_BIT_STATUS|C_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, negative, carry status, carry", 0x36, 0xc2, ZERO_BIT, 0x85, C_BIT_STATUS, N_BIT_STATUS|C_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, zero, zero status", 0x36, 0x00, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, zero, carry status", 0x36, 0x00, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, zero, zero status, carry", 0x36, 0x80, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS|C_BIT_STATUS),
+		mkZeroPageXWithStatus("Zero-page X, zero, carry status, carry", 0x36, 0x80, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS|C_BIT_STATUS),
+	}
+
+	runMemoryTests(zeroPageXTests, uint16(0x03))
+
+	absoluteTests := []testInput{
+		mkAbsoluteWithStatus("Absolute, positive, zero status", 0x2e, 0x06, ZERO_BIT, 0x0c, ZERO_BIT, ZERO_BIT),
+		mkAbsoluteWithStatus("Absolute, positive, carry status", 0x2e, 0x06, ZERO_BIT, 0x0d, C_BIT_STATUS, ZERO_BIT),
+		mkAbsoluteWithStatus("Absolute, positive, zero status, carry", 0x2e, 0x84, ZERO_BIT, 0x08, ZERO_BIT, C_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, positive, carry status, carry", 0x2e, 0x84, ZERO_BIT, 0x09, C_BIT_STATUS, C_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, negative, zero status", 0x2e, 0x66, ZERO_BIT, 0xcc, ZERO_BIT, N_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, negative, carry status", 0x2e, 0x66, ZERO_BIT, 0xcd, C_BIT_STATUS, N_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, negative, zero status, carry", 0x2e, 0xc2, ZERO_BIT, 0x84, ZERO_BIT, N_BIT_STATUS|C_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, negative, carry status, carry", 0x2e, 0xc2, ZERO_BIT, 0x85, C_BIT_STATUS, N_BIT_STATUS|C_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, zero, zero status", 0x2e, 0x00, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, zero, carry status", 0x2e, 0x00, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, zero, zero status, carry", 0x2e, 0x80, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS|C_BIT_STATUS),
+		mkAbsoluteWithStatus("Absolute, zero, carry status, carry", 0x2e, 0x80, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS|C_BIT_STATUS),
+	}
+
+	runMemoryTests(absoluteTests, uint16(0x1003))
+
+	absoluteXTests := []testInput{
+		mkAbsoluteXWithStatus("Absolute X, positive, zero status", 0x3e, 0x06, ZERO_BIT, 0x0c, ZERO_BIT, ZERO_BIT),
+		mkAbsoluteXWithStatus("Absolute X, positive, carry status", 0x3e, 0x06, ZERO_BIT, 0x0d, C_BIT_STATUS, ZERO_BIT),
+		mkAbsoluteXWithStatus("Absolute X, positive, zero status, carry", 0x3e, 0x84, ZERO_BIT, 0x08, ZERO_BIT, C_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, positive, carry status, carry", 0x3e, 0x84, ZERO_BIT, 0x09, C_BIT_STATUS, C_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, negative, zero status", 0x3e, 0x66, ZERO_BIT, 0xcc, ZERO_BIT, N_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, negative, carry status", 0x3e, 0x66, ZERO_BIT, 0xcd, C_BIT_STATUS, N_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, negative, zero status, carry", 0x3e, 0xc2, ZERO_BIT, 0x84, ZERO_BIT, N_BIT_STATUS|C_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, negative, carry status, carry", 0x3e, 0xc2, ZERO_BIT, 0x85, C_BIT_STATUS, N_BIT_STATUS|C_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, zero, zero status", 0x3e, 0x00, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, zero, carry status", 0x3e, 0x00, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, zero, zero status, carry", 0x3e, 0x80, ZERO_BIT, 0x00, ZERO_BIT, Z_BIT_STATUS|C_BIT_STATUS),
+		mkAbsoluteXWithStatus("Absolute X, zero, carry status, carry", 0x3e, 0x80, ZERO_BIT, 0x01, C_BIT_STATUS, Z_BIT_STATUS|C_BIT_STATUS),
+	}
+
+	runMemoryTests(absoluteXTests, uint16(0x1003))
+}
+
 func setCommonFields(test testInput, name string, initial, expected, status uint8) testInput {
 	test.name = name
 	test.initial = initial
@@ -1094,6 +1228,14 @@ func mkAccumulator(name string, opcode, initial, expected, status uint8) testInp
 	return setCommonFields(test, name, initial, expected, status)
 }
 
+func mkAccumulatorWithStatus(name string, opcode, initial, expected, initial_status, expected_status uint8) testInput {
+	test := testInput{
+		rom:            []uint8{opcode},
+		initial_status: initial_status,
+	}
+	return setCommonFields(test, name, initial, expected, expected_status)
+}
+
 func mkImmediate(name string, opcode, param, initial, expected, status uint8) testInput {
 	test := testInput{
 		rom: []uint8{opcode, param},
@@ -1109,6 +1251,15 @@ func mkZeroPage(name string, opcode, param, initial, expected, status uint8) tes
 	return setCommonFields(test, name, initial, expected, status)
 }
 
+func mkZeroPageWithStatus(name string, opcode, param, initial, expected, initial_status, expected_status uint8) testInput {
+	test := testInput{
+		memory:         []uint8{0x00, 0x00, 0x00, param},
+		rom:            []uint8{opcode, 0x03},
+		initial_status: initial_status,
+	}
+	return setCommonFields(test, name, initial, expected, expected_status)
+}
+
 func mkZeroPageX(name string, opcode, param, initial, expected, status uint8) testInput {
 	test := testInput{
 		memory:          []uint8{0x00, 0x00, 0x00, param},
@@ -1116,6 +1267,16 @@ func mkZeroPageX(name string, opcode, param, initial, expected, status uint8) te
 		initial_index_x: 0x02,
 	}
 	return setCommonFields(test, name, initial, expected, status)
+}
+
+func mkZeroPageXWithStatus(name string, opcode, param, initial, expected, initial_status, expected_status uint8) testInput {
+	test := testInput{
+		memory:          []uint8{0x00, 0x00, 0x00, param},
+		rom:             []uint8{opcode, 0x01},
+		initial_index_x: 0x02,
+		initial_status:  initial_status,
+	}
+	return setCommonFields(test, name, initial, expected, expected_status)
 }
 
 func mkZeroPageY(name string, opcode, param, initial, expected, status uint8) testInput {
@@ -1135,6 +1296,15 @@ func mkAbsolute(name string, opcode, param, initial, expected, status uint8) tes
 	return setCommonFields(test, name, initial, expected, status)
 }
 
+func mkAbsoluteWithStatus(name string, opcode, param, initial, expected, initial_status, expected_status uint8) testInput {
+	test := testInput{
+		upper_memory:   []uint8{0x00, 0x00, 0x00, param},
+		rom:            []uint8{opcode, 0x03, 0x10},
+		initial_status: initial_status,
+	}
+	return setCommonFields(test, name, initial, expected, expected_status)
+}
+
 func mkAbsoluteX(name string, opcode, param, initial, expected, status uint8) testInput {
 	test := testInput{
 		upper_memory:    []uint8{0x00, 0x00, 0x00, param},
@@ -1142,6 +1312,16 @@ func mkAbsoluteX(name string, opcode, param, initial, expected, status uint8) te
 		initial_index_x: 0x02,
 	}
 	return setCommonFields(test, name, initial, expected, status)
+}
+
+func mkAbsoluteXWithStatus(name string, opcode, param, initial, expected, initial_status, expected_status uint8) testInput {
+	test := testInput{
+		upper_memory:    []uint8{0x00, 0x00, 0x00, param},
+		rom:             []uint8{opcode, 0x01, 0x10},
+		initial_index_x: 0x02,
+		initial_status:  initial_status,
+	}
+	return setCommonFields(test, name, initial, expected, expected_status)
 }
 
 func mkAbsoluteY(name string, opcode, param, initial, expected, status uint8) testInput {

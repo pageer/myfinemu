@@ -348,6 +348,41 @@ func (c *CPU) getOpcodeImpl(operation string) func(*CPU, AddressMode) (Instructi
 			return InstructionContinue, nil
 		}
 
+	case "PLP":
+		// "Pull stack to status register" instruction
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			c.status = c.popStack()
+			return InstructionContinue, nil
+		}
+
+	case "ROL":
+		// "Rotate left" instruction
+		// This differs from ASL in the handling of the carry bit
+		return func(c *CPU, mode AddressMode) (InstructionPostProccessingMode, error) {
+			var (
+				carry bool
+				value uint8
+			)
+			if mode == AddrAccumulator {
+				value, carry = shiftLeftWithCarry(c.accumulator)
+				c.accumulator = value
+				if c.status&C_BIT_STATUS == C_BIT_STATUS {
+					c.accumulator += uint8(0x01)
+				}
+				c.updateStatusFlags(c.accumulator)
+			} else {
+				value_address := c.getParameterValue(mode)
+				value, carry = shiftLeftWithCarry(c.memory[value_address])
+				c.memory[value_address] = value
+				if c.status&C_BIT_STATUS == C_BIT_STATUS {
+					c.memory[value_address] += uint8(0x01)
+				}
+				c.updateStatusFlags(value)
+			}
+			setCarryFlag(c, carry)
+			return InstructionContinue, nil
+		}
+
 	case "TAX":
 		// "Transfer A to X"
 		// Copies the value in the accumulator to the index X register.
